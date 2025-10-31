@@ -30,23 +30,10 @@ module Toon
   # @param stringify_on [String, nil] Optional key name to stringify non-primitives in array of hashes (default: nil)
   # @return [String] TOON-formatted string
   def self.encode(input, indent: 2, delimiter: DEFAULT_DELIMITER, length_marker: false, normalize_on: nil, flatten_on: nil, stringify_on: nil)
-    # Apply normalization if normalize_on is specified
-    if normalize_on && input.is_a?(Hash) && input.key?(normalize_on)
-      input = input.dup
-      input[normalize_on] = Normalizer.normalize_array_of_hashes(input[normalize_on])
-    end
-
-    # Apply flattening if flatten_on is specified (AFTER normalization, BEFORE stringification)
-    if flatten_on && input.is_a?(Hash) && input.key?(flatten_on)
-      input = input.dup unless normalize_on  # Only dup if not already duped
-      input[flatten_on] = Flattener.flatten_array_of_hashes(input[flatten_on])
-    end
-
-    # Apply stringification if stringify_on is specified (AFTER normalization and flattening)
-    if stringify_on && input.is_a?(Hash) && input.key?(stringify_on)
-      input = input.dup unless normalize_on || flatten_on  # Only dup if not already duped
-      input[stringify_on] = Stringifier.stringify_array_of_hashes(input[stringify_on])
-    end
+    # Apply transformations recursively at all nesting levels
+    input = apply_recursive_transformation(input, normalize_on, :normalize) if normalize_on
+    input = apply_recursive_transformation(input, flatten_on, :flatten) if flatten_on
+    input = apply_recursive_transformation(input, stringify_on, :stringify) if stringify_on
 
     normalized_value = Normalizer.normalize_value(input)
     options = resolve_options(indent: indent, delimiter: delimiter, length_marker: length_marker)
@@ -71,23 +58,10 @@ module Toon
     cursor = LineCursor.new(scan_result.lines, scan_result.blank_lines)
     result = Decoders.decode_value_from_lines(cursor, resolved_options)
 
-    # Apply destringification if destringify_on is specified (FIRST: inverse of stringify)
-    if destringify_on && result.is_a?(Hash) && result.key?(destringify_on)
-      result = result.dup
-      result[destringify_on] = Destringifier.destringify_array_of_hashes(result[destringify_on])
-    end
-
-    # Apply unflattening if unflatten_on is specified (SECOND: inverse of flatten)
-    if unflatten_on && result.is_a?(Hash) && result.key?(unflatten_on)
-      result = result.dup unless destringify_on
-      result[unflatten_on] = Unflattener.unflatten_array_of_hashes(result[unflatten_on])
-    end
-
-    # Apply denormalization if denormalize_on is specified (THIRD: inverse of normalize)
-    if denormalize_on && result.is_a?(Hash) && result.key?(denormalize_on)
-      result = result.dup unless destringify_on || unflatten_on
-      result[denormalize_on] = Denormalizer.denormalize_array_of_hashes(result[denormalize_on])
-    end
+    # Apply inverse transformations recursively at all nesting levels (in reverse order)
+    result = apply_recursive_transformation(result, destringify_on, :destringify) if destringify_on
+    result = apply_recursive_transformation(result, unflatten_on, :unflatten) if unflatten_on
+    result = apply_recursive_transformation(result, denormalize_on, :denormalize) if denormalize_on
 
     result
   end
@@ -108,6 +82,44 @@ module Toon
         indent: indent,
         strict: strict
       }
+    end
+
+    def apply_recursive_transformation(value, target_key, transformation_type)
+      case value
+      when Hash
+        transformed_hash = {}
+        value.each do |key, val|
+          if key == target_key
+            transformed_hash[key] = apply_transformation(val, transformation_type)
+          else
+            transformed_hash[key] = apply_recursive_transformation(val, target_key, transformation_type)
+          end
+        end
+        transformed_hash
+      when Array
+        value.map { |item| apply_recursive_transformation(item, target_key, transformation_type) }
+      else
+        value
+      end
+    end
+
+    def apply_transformation(value, transformation_type)
+      case transformation_type
+      when :normalize
+        Normalizer.normalize_array_of_hashes(value)
+      when :flatten
+        Flattener.flatten_array_of_hashes(value)
+      when :stringify
+        Stringifier.stringify_array_of_hashes(value)
+      when :destringify
+        Destringifier.destringify_array_of_hashes(value)
+      when :unflatten
+        Unflattener.unflatten_array_of_hashes(value)
+      when :denormalize
+        Denormalizer.denormalize_array_of_hashes(value)
+      else
+        value
+      end
     end
   end
 

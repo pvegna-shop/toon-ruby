@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
   spec.metadata['homepage_uri'] = spec.homepage
   spec.metadata['source_code_uri'] = 'https://github.com/andrepcg/toon-ruby'
 
-  spec.files = Dir['lib/**/*', 'LICENSE', 'README.md', '*.rbi']
+  spec.files = Dir['lib/**/*', 'rbi/**/*', 'LICENSE', 'README.md']
   spec.require_paths = ['lib']
 
   spec.add_development_dependency 'rake', '~> 13.0'
