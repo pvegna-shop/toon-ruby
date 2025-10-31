@@ -10,6 +10,7 @@ module Toon
   COLON = ':'
   SPACE = ' '
   PIPE = '|'
+  HASH = '#'
 
   # Brackets and braces
   OPEN_BRACKET = '['

@@ -771,4 +771,799 @@ RSpec.describe Toon do
       expect(Toon.encode(obj)).to eq('tags[3]: reading,gaming,coding')
     end
   end
+
+  describe 'normalize_on option' do
+    describe 'basic normalization' do
+      it 'normalizes simple array of hashes with missing keys' do
+        input = { 'columns' => [{ 'one' => 1 }, { 'one' => 1, 'two' => 2 }] }
+        result = Toon.encode(input, normalize_on: 'columns')
+        # After normalization, both hashes should have 'one' and 'two' keys
+        expect(result).to eq("columns[2]{one,two}:\n  1,null\n  1,2")
+      end
+
+      it 'normalizes with nil as default for missing keys' do
+        input = { 'data' => [{ 'a' => 1, 'b' => 2 }, { 'a' => 3 }, { 'c' => 5 }] }
+        result = Toon.encode(input, normalize_on: 'data')
+        # All hashes should have keys: a, b, c
+        expect(result).to eq("data[3]{a,b,c}:\n  1,2,null\n  3,null,null\n  null,null,5")
+      end
+
+      it 'does not modify input when normalize_on is nil' do
+        input = { 'columns' => [{ 'one' => 1 }, { 'one' => 1, 'two' => 2 }] }
+        result = Toon.encode(input, normalize_on: nil)
+        # Without normalize_on, objects have different keys so should use list format
+        expect(result).to eq(
+          "columns[2]:\n" \
+          "  - one: 1\n" \
+          "  - one: 1\n" \
+          "    two: 2"
+        )
+      end
+
+      it 'does not modify input when normalize_on key does not exist' do
+        input = { 'columns' => [{ 'one' => 1 }, { 'one' => 1, 'two' => 2 }] }
+        result = Toon.encode(input, normalize_on: 'nonexistent')
+        # Should behave as normal without normalization
+        expect(result).to eq(
+          "columns[2]:\n" \
+          "  - one: 1\n" \
+          "  - one: 1\n" \
+          "    two: 2"
+        )
+      end
+
+      it 'handles empty arrays' do
+        input = { 'columns' => [] }
+        result = Toon.encode(input, normalize_on: 'columns')
+        expect(result).to eq('columns[0]:')
+      end
+
+      it 'handles single hash in array' do
+        input = { 'columns' => [{ 'one' => 1 }] }
+        result = Toon.encode(input, normalize_on: 'columns')
+        expect(result).to eq("columns[1]{one}:\n  1")
+      end
+    end
+
+    describe 'nested normalization' do
+      it 'normalizes nested hashes recursively' do
+        input = {
+          'columns' => [
+            { 'one' => 1 },
+            { 'one' => 1, 'two' => { 'three' => 3 } }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'columns')
+        # First hash should get 'two' key with nested hash containing 'three' => nil
+        # Second hash keeps its structure
+        # Both should now have same structure, so use list format (nested objects)
+        expect(result).to eq(
+          "columns[2]:\n" \
+          "  - one: 1\n" \
+          "    two:\n" \
+          "      three: null\n" \
+          "  - one: 1\n" \
+          "    two:\n" \
+          "      three: 3"
+        )
+      end
+
+      it 'normalizes deeply nested structures' do
+        input = {
+          'items' => [
+            { 'a' => { 'b' => { 'c' => 1 } } },
+            { 'a' => { 'b' => {} } },
+            { 'a' => {} }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'items')
+        # All should have a.b.c structure
+        expect(result).to eq(
+          "items[3]:\n" \
+          "  - a:\n" \
+          "      b:\n" \
+          "        c: 1\n" \
+          "  - a:\n" \
+          "      b:\n" \
+          "        c: null\n" \
+          "  - a:\n" \
+          "      b:\n" \
+          "        c: null"
+        )
+      end
+
+      it 'normalizes mixed nested and flat keys' do
+        input = {
+          'data' => [
+            { 'id' => 1, 'meta' => { 'name' => 'test' } },
+            { 'id' => 2 },
+            { 'meta' => { 'name' => 'test2', 'value' => 42 } }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'data')
+        # All should have 'id' and 'meta' with nested 'name' and 'value'
+        expect(result).to eq(
+          "data[3]:\n" \
+          "  - id: 1\n" \
+          "    meta:\n" \
+          "      name: test\n" \
+          "      value: null\n" \
+          "  - id: 2\n" \
+          "    meta:\n" \
+          "      name: null\n" \
+          "      value: null\n" \
+          "  - id: null\n" \
+          "    meta:\n" \
+          "      name: test2\n" \
+          "      value: 42"
+        )
+      end
+
+      it 'handles multiple levels of nesting' do
+        input = {
+          'records' => [
+            { 'level1' => { 'level2' => { 'level3' => 'deep' } } },
+            { 'level1' => { 'level2' => { 'other' => 'value' } } }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'records')
+        # Both should have level1.level2.level3 and level1.level2.other
+        expect(result).to eq(
+          "records[2]:\n" \
+          "  - level1:\n" \
+          "      level2:\n" \
+          "        level3: deep\n" \
+          "        other: null\n" \
+          "  - level1:\n" \
+          "      level2:\n" \
+          "        level3: null\n" \
+          "        other: value"
+        )
+      end
+    end
+
+    describe 'edge cases' do
+      it 'handles arrays with non-hash elements gracefully' do
+        input = { 'mixed' => [1, 'string', { 'key' => 'value' }] }
+        result = Toon.encode(input, normalize_on: 'mixed')
+        # Should not crash, returns array as-is (not all hashes)
+        expect(result).to eq(
+          "mixed[3]:\n" \
+          "  - 1\n" \
+          "  - string\n" \
+          "  - key: value"
+        )
+      end
+
+      it 'handles input that is not a hash' do
+        input = [{ 'one' => 1 }, { 'one' => 1, 'two' => 2 }]
+        result = Toon.encode(input, normalize_on: 'columns')
+        # Should not crash, just ignore normalize_on for non-hash input
+        expect(result).to eq(
+          "[2]:\n" \
+          "  - one: 1\n" \
+          "  - one: 1\n" \
+          "    two: 2"
+        )
+      end
+
+      it 'preserves existing keys with nil values' do
+        input = {
+          'data' => [
+            { 'a' => nil, 'b' => 1 },
+            { 'a' => 2 }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'data')
+        expect(result).to eq("data[2]{a,b}:\n  null,1\n  2,null")
+      end
+
+      it 'handles hashes with all same keys (no normalization needed)' do
+        input = {
+          'items' => [
+            { 'id' => 1, 'name' => 'first' },
+            { 'id' => 2, 'name' => 'second' }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'items')
+        # Should still work, just no changes needed
+        expect(result).to eq("items[2]{id,name}:\n  1,first\n  2,second")
+      end
+    end
+
+    describe 'integration with other options' do
+      it 'works with delimiter option' do
+        input = { 'columns' => [{ 'one' => 1 }, { 'one' => 1, 'two' => 2 }] }
+        result = Toon.encode(input, normalize_on: 'columns', delimiter: '|')
+        expect(result).to eq("columns[2|]{one|two}:\n  1|null\n  1|2")
+      end
+
+      it 'works with length_marker option' do
+        input = { 'columns' => [{ 'one' => 1 }, { 'one' => 1, 'two' => 2 }] }
+        result = Toon.encode(input, normalize_on: 'columns', length_marker: '#')
+        expect(result).to eq("columns[#2]{one,two}:\n  1,null\n  1,2")
+      end
+
+      it 'works with indent option' do
+        input = { 'columns' => [{ 'one' => 1 }, { 'one' => 1, 'two' => 2 }] }
+        result = Toon.encode(input, normalize_on: 'columns', indent: 4)
+        expect(result).to eq("columns[2]{one,two}:\n    1,null\n    1,2")
+      end
+
+      it 'works with all options combined' do
+        input = { 'columns' => [{ 'one' => 1 }, { 'one' => 1, 'two' => 2 }] }
+        result = Toon.encode(input, normalize_on: 'columns', delimiter: '|', length_marker: '#', indent: 4)
+        expect(result).to eq("columns[#2|]{one|two}:\n    1|null\n    1|2")
+      end
+    end
+  end
+
+  describe 'stringify_on option' do
+    describe 'basic stringification' do
+      it 'stringifies arrays in hash values' do
+        input = { 'columns' => [{ 'one' => 1, 'two' => [2] }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{one,two}:\n  1,\"[2]\"")
+      end
+
+      it 'stringifies hashes in hash values' do
+        input = { 'columns' => [{ 'one' => 1, 'three' => { 'three' => 3 } }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{one,three}:\n  1,\"{\\\"three\\\"=>3}\"")
+      end
+
+      it 'stringifies both arrays and hashes' do
+        input = { 'columns' => [{ 'one' => 1, 'two' => [2], 'three' => { 'three' => 3 } }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{one,two,three}:\n  1,\"[2]\",\"{\\\"three\\\"=>3}\"")
+      end
+
+      it 'handles multiple hashes in the array' do
+        input = {
+          'columns' => [
+            { 'id' => 1, 'data' => [1, 2, 3] },
+            { 'id' => 2, 'data' => { 'a' => 1 } }
+          ]
+        }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[2]{id,data}:\n  1,\"[1, 2, 3]\"\n  2,\"{\\\"a\\\"=>1}\"")
+      end
+    end
+
+    describe 'primitive preservation' do
+      it 'keeps strings as-is' do
+        input = { 'columns' => [{ 'id' => 1, 'name' => 'test' }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{id,name}:\n  1,test")
+      end
+
+      it 'keeps numbers as-is' do
+        input = { 'columns' => [{ 'int' => 42, 'float' => 3.14, 'negative' => -7 }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{int,float,negative}:\n  42,3.14,-7")
+      end
+
+      it 'keeps booleans as-is' do
+        input = { 'columns' => [{ 'yes' => true, 'no' => false }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{yes,no}:\n  true,false")
+      end
+
+      it 'keeps nil as-is' do
+        input = { 'columns' => [{ 'id' => 1, 'value' => nil }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{id,value}:\n  1,null")
+      end
+
+      it 'handles mix of primitives and non-primitives' do
+        input = {
+          'columns' => [{
+            'str' => 'text',
+            'num' => 123,
+            'bool' => true,
+            'nil' => nil,
+            'arr' => [1, 2],
+            'hash' => { 'key' => 'val' }
+          }]
+        }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{str,num,bool,nil,arr,hash}:\n  text,123,true,null,\"[1, 2]\",\"{\\\"key\\\"=>\\\"val\\\"}\"")
+      end
+    end
+
+    describe 'edge cases' do
+      it 'does not modify input when stringify_on is nil' do
+        input = { 'columns' => [{ 'one' => 1, 'two' => [2] }] }
+        result = Toon.encode(input, stringify_on: nil)
+        # Without stringify_on, nested array causes list format
+        expect(result).to eq(
+          "columns[1]:\n" \
+          "  - one: 1\n" \
+          "    two[1]: 2"
+        )
+      end
+
+      it 'does not modify input when stringify_on key does not exist' do
+        input = { 'columns' => [{ 'one' => 1, 'two' => [2] }] }
+        result = Toon.encode(input, stringify_on: 'nonexistent')
+        # Should behave as normal without stringification
+        expect(result).to eq(
+          "columns[1]:\n" \
+          "  - one: 1\n" \
+          "    two[1]: 2"
+        )
+      end
+
+      it 'handles empty arrays' do
+        input = { 'columns' => [] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq('columns[0]:')
+      end
+
+      it 'handles single hash in array' do
+        input = { 'columns' => [{ 'one' => 1, 'two' => [2] }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{one,two}:\n  1,\"[2]\"")
+      end
+
+      it 'handles empty arrays as values' do
+        input = { 'columns' => [{ 'id' => 1, 'data' => [] }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{id,data}:\n  1,\"[]\"")
+      end
+
+      it 'handles empty hashes as values' do
+        input = { 'columns' => [{ 'id' => 1, 'data' => {} }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{id,data}:\n  1,\"{}\"")
+      end
+
+      it 'handles nested arrays' do
+        input = { 'columns' => [{ 'id' => 1, 'matrix' => [[1, 2], [3, 4]] }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{id,matrix}:\n  1,\"[[1, 2], [3, 4]]\"")
+      end
+
+      it 'handles nested hashes' do
+        input = { 'columns' => [{ 'id' => 1, 'nested' => { 'a' => { 'b' => 2 } } }] }
+        result = Toon.encode(input, stringify_on: 'columns')
+        expect(result).to eq("columns[1]{id,nested}:\n  1,\"{\\\"a\\\"=>{\\\"b\\\"=>2}}\"")
+      end
+
+      it 'handles arrays with non-hash elements gracefully' do
+        input = { 'mixed' => [1, 'string', { 'key' => [1, 2] }] }
+        result = Toon.encode(input, stringify_on: 'mixed')
+        # Should not crash, returns array as-is (not all hashes)
+        expect(result).to eq(
+          "mixed[3]:\n" \
+          "  - 1\n" \
+          "  - string\n" \
+          "  - key[2]: 1,2"
+        )
+      end
+
+      it 'handles input that is not a hash' do
+        input = [{ 'one' => 1, 'two' => [2] }]
+        result = Toon.encode(input, stringify_on: 'columns')
+        # Should not crash, just ignore stringify_on for non-hash input
+        expect(result).to eq(
+          "[1]:\n" \
+          "  - one: 1\n" \
+          "    two[1]: 2"
+        )
+      end
+    end
+
+    describe 'integration with normalize_on' do
+      it 'applies normalize_on first, then stringify_on' do
+        input = {
+          'columns' => [
+            { 'one' => 1 },
+            { 'one' => 1, 'two' => [2] }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'columns', stringify_on: 'columns')
+        # After normalize: both have 'one' and 'two' keys (first gets two: nil)
+        # After stringify: [2] becomes "[2]", nil stays nil
+        expect(result).to eq("columns[2]{one,two}:\n  1,null\n  1,\"[2]\"")
+      end
+
+      it 'works with both options on same key' do
+        input = {
+          'data' => [
+            { 'id' => 1, 'values' => [1, 2, 3] },
+            { 'values' => [4, 5] },
+            { 'id' => 3, 'meta' => { 'key' => 'value' } }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'data', stringify_on: 'data')
+        # After normalize: all have id, values, meta
+        # After stringify: arrays and hashes become strings, primitives stay
+        expect(result).to eq(
+          "data[3]{id,values,meta}:\n" \
+          "  1,\"[1, 2, 3]\",null\n" \
+          "  null,\"[4, 5]\",null\n" \
+          "  3,null,\"{\\\"key\\\"=>\\\"value\\\"}\""
+        )
+      end
+
+      it 'preserves execution order (normalize then stringify)' do
+        input = {
+          'columns' => [
+            { 'one' => 1, 'two' => { 'a' => 1 } },
+            { 'two' => { 'a' => 1, 'b' => 2 } }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'columns', stringify_on: 'columns')
+        # After normalize: both have 'one' and 'two' keys
+        # After stringify: the hash values get stringified
+        expect(result).to eq(
+          "columns[2]{one,two}:\n" \
+          "  1,\"{\\\"a\\\"=>1, \\\"b\\\"=>nil}\"\n" \
+          "  null,\"{\\\"a\\\"=>1, \\\"b\\\"=>2}\""
+        )
+      end
+    end
+
+    describe 'integration with other options' do
+      it 'works with delimiter option' do
+        input = { 'columns' => [{ 'one' => 1, 'two' => [2] }] }
+        result = Toon.encode(input, stringify_on: 'columns', delimiter: '|')
+        expect(result).to eq("columns[1|]{one|two}:\n  1|\"[2]\"")
+      end
+
+      it 'works with length_marker option' do
+        input = { 'columns' => [{ 'one' => 1, 'two' => [2] }] }
+        result = Toon.encode(input, stringify_on: 'columns', length_marker: '#')
+        expect(result).to eq("columns[#1]{one,two}:\n  1,\"[2]\"")
+      end
+
+      it 'works with indent option' do
+        input = { 'columns' => [{ 'one' => 1, 'two' => [2] }] }
+        result = Toon.encode(input, stringify_on: 'columns', indent: 4)
+        expect(result).to eq("columns[1]{one,two}:\n    1,\"[2]\"")
+      end
+
+      it 'works with all options combined' do
+        input = {
+          'columns' => [
+            { 'one' => 1 },
+            { 'one' => 1, 'two' => [2], 'three' => { 'x' => 3 } }
+          ]
+        }
+        result = Toon.encode(
+          input,
+          normalize_on: 'columns',
+          stringify_on: 'columns',
+          delimiter: '|',
+          length_marker: '#',
+          indent: 4
+        )
+        # After normalize: first hash gets three: {"x" => nil} (nested hash structure)
+        # After stringify: {"x" => nil} becomes string "{\"x\"=>nil}"
+        expect(result).to eq(
+          "columns[#2|]{one|two|three}:\n" \
+          "    1|null|\"{\\\"x\\\"=>nil}\"\n" \
+          "    1|\"[2]\"|\"{\\\"x\\\"=>3}\""
+        )
+      end
+    end
+  end
+
+  describe 'flatten_on option' do
+    describe 'basic flattening' do
+      it 'flattens simple nested hash' do
+        input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq("items[1]{one/two}:\n  2")
+      end
+
+      it 'flattens multiple levels of nesting' do
+        input = { 'items' => [{ 'a' => { 'b' => { 'c' => 3 } } }] }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq("items[1]{a/b/c}:\n  3")
+      end
+
+      it 'flattens mixed hash and non-hash values' do
+        input = { 'items' => [{ 'one' => 1, 'two' => { 'three' => 3 } }] }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq("items[1]{one,two/three}:\n  1,3")
+      end
+
+      it 'does not flatten array values' do
+        input = { 'items' => [{ 'one' => [1, 2], 'two' => { 'three' => 3 } }] }
+        result = Toon.encode(input, flatten_on: 'items')
+        # Arrays remain as-is, only hashes are flattened
+        expect(result).to eq(
+          "items[1]:\n" \
+          "  - one[2]: 1,2\n" \
+          "    two/three: 3"
+        )
+      end
+
+      it 'flattens multiple hashes in array' do
+        input = {
+          'items' => [
+            { 'a' => { 'b' => 1 } },
+            { 'a' => { 'b' => 2 } }
+          ]
+        }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq("items[2]{a/b}:\n  1\n  2")
+      end
+
+      it 'handles empty nested hashes' do
+        input = { 'items' => [{ 'one' => {} }] }
+        result = Toon.encode(input, flatten_on: 'items')
+        # Empty hash produces no keys
+        expect(result).to eq("items[1]{one}:\n  ")
+      end
+
+      it 'handles deeply nested structures' do
+        input = {
+          'items' => [{
+            'level1' => {
+              'level2' => {
+                'level3' => {
+                  'level4' => 'deep'
+                }
+              }
+            }
+          }]
+        }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq("items[1]{level1/level2/level3/level4}:\n  deep")
+      end
+
+      it 'flattens complex nested structure' do
+        input = {
+          'items' => [{
+            'id' => 1,
+            'meta' => {
+              'author' => 'Alice',
+              'tags' => {
+                'primary' => 'tech',
+                'secondary' => 'ai'
+              }
+            }
+          }]
+        }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq("items[1]{id,meta/author,meta/tags/primary,meta/tags/secondary}:\n  1,Alice,tech,ai")
+      end
+    end
+
+    describe 'edge cases' do
+      it 'does not modify input when flatten_on is nil' do
+        input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
+        result = Toon.encode(input, flatten_on: nil)
+        # Without flatten_on, nested hash causes list format
+        expect(result).to eq(
+          "items[1]:\n" \
+          "  - one:\n" \
+          "      two: 2"
+        )
+      end
+
+      it 'does not modify input when flatten_on key does not exist' do
+        input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
+        result = Toon.encode(input, flatten_on: 'nonexistent')
+        # Should behave as normal without flattening
+        expect(result).to eq(
+          "items[1]:\n" \
+          "  - one:\n" \
+          "      two: 2"
+        )
+      end
+
+      it 'handles empty arrays' do
+        input = { 'items' => [] }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq('items[0]:')
+      end
+
+      it 'handles single hash in array' do
+        input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq("items[1]{one/two}:\n  2")
+      end
+
+      it 'handles arrays with non-hash elements gracefully' do
+        input = { 'mixed' => [1, 'string', { 'key' => { 'nested' => 'value' } }] }
+        result = Toon.encode(input, flatten_on: 'mixed')
+        # Should not crash, returns array as-is (not all hashes)
+        expect(result).to eq(
+          "mixed[3]:\n" \
+          "  - 1\n" \
+          "  - string\n" \
+          "  - key/nested: value"
+        )
+      end
+
+      it 'handles input that is not a hash' do
+        input = [{ 'one' => { 'two' => 2 } }]
+        result = Toon.encode(input, flatten_on: 'items')
+        # Should not crash, just ignore flatten_on for non-hash input
+        expect(result).to eq(
+          "[1]:\n" \
+          "  - one:\n" \
+          "      two: 2"
+        )
+      end
+
+      it 'handles nil values in nested hashes' do
+        input = { 'items' => [{ 'a' => { 'b' => nil } }] }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq("items[1]{a/b}:\n  null")
+      end
+
+      it 'handles mixed types as nested values' do
+        input = {
+          'items' => [{
+            'a' => { 'b' => 1 },
+            'c' => 'string',
+            'd' => true,
+            'e' => nil
+          }]
+        }
+        result = Toon.encode(input, flatten_on: 'items')
+        expect(result).to eq("items[1]{a/b,c,d,e}:\n  1,string,true,null")
+      end
+    end
+
+    describe 'integration with normalize_on' do
+      it 'applies normalize_on first, then flatten_on' do
+        input = {
+          'items' => [
+            { 'one' => { 'two' => 2 } },
+            { 'one' => { 'two' => 2, 'three' => 3 } }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'items', flatten_on: 'items')
+        # After normalize: both have same nested structure
+        # After flatten: nested keys become flat
+        expect(result).to eq("items[2]{one/two,one/three}:\n  2,null\n  2,3")
+      end
+
+      it 'works with both options on same key' do
+        input = {
+          'data' => [
+            { 'id' => 1, 'meta' => { 'name' => 'Alice' } },
+            { 'meta' => { 'name' => 'Bob', 'age' => 30 } },
+            { 'id' => 3 }
+          ]
+        }
+        result = Toon.encode(input, normalize_on: 'data', flatten_on: 'data')
+        # After normalize: all have id and meta with same nested keys
+        # After flatten: meta/name and meta/age become flat keys
+        expect(result).to eq(
+          "data[3]{id,meta/name,meta/age}:\n" \
+          "  1,Alice,null\n" \
+          "  null,Bob,30\n" \
+          "  3,null,null"
+        )
+      end
+    end
+
+    describe 'integration with stringify_on' do
+      it 'applies flatten_on first, then stringify_on' do
+        input = {
+          'items' => [{
+            'one' => { 'two' => [1, 2, 3] }
+          }]
+        }
+        result = Toon.encode(input, flatten_on: 'items', stringify_on: 'items')
+        # After flatten: one/two becomes a key with array value
+        # After stringify: array becomes string
+        expect(result).to eq("items[1]{one/two}:\n  \"[1, 2, 3]\"")
+      end
+
+      it 'preserves primitives after flattening and stringifies arrays' do
+        input = {
+          'items' => [{
+            'a' => { 'b' => 1 },
+            'c' => [2, 3]
+          }]
+        }
+        result = Toon.encode(input, flatten_on: 'items', stringify_on: 'items')
+        # After flatten: a/b => 1, c => [2,3]
+        # After stringify: primitive stays, array becomes string
+        expect(result).to eq("items[1]{a/b,c}:\n  1,\"[2, 3]\"")
+      end
+    end
+
+    describe 'integration with all three options' do
+      it 'applies normalize, flatten, then stringify in correct order' do
+        input = {
+          'items' => [
+            { 'one' => { 'two' => [1, 2] } },
+            { 'one' => { 'two' => [3, 4], 'three' => { 'four' => 5 } } }
+          ]
+        }
+        result = Toon.encode(
+          input,
+          normalize_on: 'items',
+          flatten_on: 'items',
+          stringify_on: 'items'
+        )
+        # After normalize: both have one.two and one.three.four structure
+        # After flatten: one/two and one/three/four become flat keys
+        # After stringify: arrays become strings, primitives stay
+        expect(result).to eq(
+          "items[2]{one/two,one/three/four}:\n" \
+          "  \"[1, 2]\",null\n" \
+          "  \"[3, 4]\",5"
+        )
+      end
+
+      it 'handles complex nested structures with all options' do
+        input = {
+          'data' => [
+            { 'id' => 1, 'meta' => { 'tags' => ['a', 'b'] } },
+            { 'meta' => { 'tags' => ['c'], 'priority' => 2 } }
+          ]
+        }
+        result = Toon.encode(
+          input,
+          normalize_on: 'data',
+          flatten_on: 'data',
+          stringify_on: 'data'
+        )
+        # After normalize: both have id, meta.tags, meta.priority
+        # After flatten: meta/tags and meta/priority become flat keys
+        # After stringify: arrays become strings
+        expect(result).to eq(
+          "data[2]{id,meta/tags,meta/priority}:\n" \
+          "  1,\"[\\\"a\\\", \\\"b\\\"]\",null\n" \
+          "  null,\"[\\\"c\\\"]\",2"
+        )
+      end
+    end
+
+    describe 'integration with other options' do
+      it 'works with delimiter option' do
+        input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
+        result = Toon.encode(input, flatten_on: 'items', delimiter: '|')
+        expect(result).to eq("items[1|]{one/two}:\n  2")
+      end
+
+      it 'works with length_marker option' do
+        input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
+        result = Toon.encode(input, flatten_on: 'items', length_marker: '#')
+        expect(result).to eq("items[#1]{one/two}:\n  2")
+      end
+
+      it 'works with indent option' do
+        input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
+        result = Toon.encode(input, flatten_on: 'items', indent: 4)
+        expect(result).to eq("items[1]{one/two}:\n    2")
+      end
+
+      it 'works with all options combined' do
+        input = {
+          'items' => [
+            { 'a' => { 'b' => 1 } },
+            { 'a' => { 'b' => 2, 'c' => [3, 4] } }
+          ]
+        }
+        result = Toon.encode(
+          input,
+          normalize_on: 'items',
+          flatten_on: 'items',
+          stringify_on: 'items',
+          delimiter: '|',
+          length_marker: '#',
+          indent: 4
+        )
+        # After normalize: both have a.b and a.c structure
+        # After flatten: a/b and a/c become flat keys
+        # After stringify: array becomes string
+        expect(result).to eq(
+          "items[#2|]{a/b|a/c}:\n" \
+          "    1|null\n" \
+          "    2|\"[3, 4]\""
+        )
+      end
+    end
+  end
 end
