@@ -19,8 +19,6 @@ require_relative 'toon/validation'
 require_relative 'toon/decoders'
 
 module Toon
-  module_function
-
   # Encode any value to TOON format
   #
   # @param input [Object] Any value to encode
@@ -31,7 +29,7 @@ module Toon
   # @param flatten_on [String, nil] Optional key name to flatten nested hashes in array of hashes (default: nil)
   # @param stringify_on [String, nil] Optional key name to stringify non-primitives in array of hashes (default: nil)
   # @return [String] TOON-formatted string
-  def encode(input, indent: 2, delimiter: DEFAULT_DELIMITER, length_marker: false, normalize_on: nil, flatten_on: nil, stringify_on: nil)
+  def self.encode(input, indent: 2, delimiter: DEFAULT_DELIMITER, length_marker: false, normalize_on: nil, flatten_on: nil, stringify_on: nil)
     # Apply normalization if normalize_on is specified
     if normalize_on && input.is_a?(Hash) && input.key?(normalize_on)
       input = input.dup
@@ -64,7 +62,7 @@ module Toon
   # @param unflatten_on [String, nil] Optional key name to unflatten nested hashes in array of hashes (default: nil)
   # @param denormalize_on [String, nil] Optional key name to denormalize array of hashes (default: nil)
   # @return [Object] Decoded Ruby value (Hash, Array, or primitive)
-  def decode(input, indent: 2, strict: true, destringify_on: nil, unflatten_on: nil, denormalize_on: nil)
+  def self.decode(input, indent: 2, strict: true, destringify_on: nil, unflatten_on: nil, denormalize_on: nil)
     resolved_options = resolve_decode_options(indent: indent, strict: strict)
     scan_result = Scanner.to_parsed_lines(input, resolved_options[:indent], resolved_options[:strict])
 
@@ -94,18 +92,43 @@ module Toon
     result
   end
 
-  def resolve_options(indent:, delimiter:, length_marker:)
-    {
-      indent: indent,
-      delimiter: delimiter,
-      length_marker: length_marker
-    }
+  class << self
+    private
+
+    def resolve_options(indent:, delimiter:, length_marker:)
+      {
+        indent: indent,
+        delimiter: delimiter,
+        length_marker: length_marker
+      }
+    end
+
+    def resolve_decode_options(indent:, strict:)
+      {
+        indent: indent,
+        strict: strict
+      }
+    end
   end
 
-  def resolve_decode_options(indent:, strict:)
-    {
-      indent: indent,
-      strict: strict
-    }
-  end
+  # Mark internal modules and classes as private to hide them from RBI generation
+  private_constant :Normalizer
+  private_constant :Flattener
+  private_constant :Stringifier
+  private_constant :Denormalizer
+  private_constant :Unflattener
+  private_constant :Destringifier
+  private_constant :Primitives
+  private_constant :Encoders
+  private_constant :StringUtils
+  private_constant :LiteralUtils
+  private_constant :Scanner
+  private_constant :Parser
+  private_constant :Validation
+  private_constant :Decoders
+  private_constant :ArrayHeaderInfo
+  private_constant :BlankLineInfo
+  private_constant :LineCursor
+  private_constant :ParsedLine
+  private_constant :ScanResult
 end
