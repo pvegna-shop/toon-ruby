@@ -89,7 +89,8 @@ module Toon
       when Hash
         transformed_hash = {}
         value.each do |key, val|
-          if key == target_key
+          # Normalize keys to strings for comparison to handle both string and symbol keys
+          if key.to_s == target_key.to_s
             transformed_hash[key] = apply_transformation(val, transformation_type)
           else
             transformed_hash[key] = apply_recursive_transformation(val, target_key, transformation_type)
