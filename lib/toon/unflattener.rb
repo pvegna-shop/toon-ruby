@@ -18,14 +18,14 @@ module Toon
     end
 
     # Unflatten a single hash
-    # Convert keys with "/" separators back to nested hash structures
-    # Example: {"one/two" => 2, "one/three/four" => 5}
+    # Convert keys with "." separators back to nested hash structures
+    # Example: {"one.two" => 2, "one.three.four" => 5}
     #       => {"one" => {"two" => 2, "three" => {"four" => 5}}}
     #
     # @param hash [Hash] The hash to unflatten
-    # @param sep [String] The separator used in flattened keys (default: "/")
+    # @param sep [String] The separator used in flattened keys (default: ".")
     # @return [Hash] The nested hash structure
-    def unflatten_hash(hash, sep = "/")
+    def unflatten_hash(hash, sep = ".")
       return hash unless hash.is_a?(Hash)
 
       result = {}

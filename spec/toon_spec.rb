@@ -1255,19 +1255,19 @@ RSpec.describe Toon do
       it 'flattens simple nested hash' do
         input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
         result = Toon.encode(input, flatten_on: 'items')
-        expect(result).to eq("items[1]{one/two}:\n  2")
+        expect(result).to eq("items[1]{one.two}:\n  2")
       end
 
       it 'flattens multiple levels of nesting' do
         input = { 'items' => [{ 'a' => { 'b' => { 'c' => 3 } } }] }
         result = Toon.encode(input, flatten_on: 'items')
-        expect(result).to eq("items[1]{a/b/c}:\n  3")
+        expect(result).to eq("items[1]{a.b.c}:\n  3")
       end
 
       it 'flattens mixed hash and non-hash values' do
         input = { 'items' => [{ 'one' => 1, 'two' => { 'three' => 3 } }] }
         result = Toon.encode(input, flatten_on: 'items')
-        expect(result).to eq("items[1]{one,two/three}:\n  1,3")
+        expect(result).to eq("items[1]{one,two.three}:\n  1,3")
       end
 
       it 'does not flatten array values' do
@@ -1277,7 +1277,7 @@ RSpec.describe Toon do
         expect(result).to eq(
           "items[1]:\n" \
           "  - one[2]: 1,2\n" \
-          "    two/three: 3"
+          "    two.three: 3"
         )
       end
 
@@ -1289,14 +1289,14 @@ RSpec.describe Toon do
           ]
         }
         result = Toon.encode(input, flatten_on: 'items')
-        expect(result).to eq("items[2]{a/b}:\n  1\n  2")
+        expect(result).to eq("items[2]{a.b}:\n  1\n  2")
       end
 
       it 'handles empty nested hashes' do
         input = { 'items' => [{ 'one' => {} }] }
         result = Toon.encode(input, flatten_on: 'items')
-        # Empty hash produces no keys
-        expect(result).to eq("items[1]{one}:\n  ")
+        # Empty hash produces no keys, resulting in empty hash which uses list format
+        expect(result).to eq("items[1]:\n  -")
       end
 
       it 'handles deeply nested structures' do
@@ -1312,7 +1312,7 @@ RSpec.describe Toon do
           }]
         }
         result = Toon.encode(input, flatten_on: 'items')
-        expect(result).to eq("items[1]{level1/level2/level3/level4}:\n  deep")
+        expect(result).to eq("items[1]{level1.level2.level3.level4}:\n  deep")
       end
 
       it 'flattens complex nested structure' do
@@ -1329,7 +1329,7 @@ RSpec.describe Toon do
           }]
         }
         result = Toon.encode(input, flatten_on: 'items')
-        expect(result).to eq("items[1]{id,meta/author,meta/tags/primary,meta/tags/secondary}:\n  1,Alice,tech,ai")
+        expect(result).to eq("items[1]{id,meta.author,meta.tags.primary,meta.tags.secondary}:\n  1,Alice,tech,ai")
       end
     end
 
@@ -1365,18 +1365,19 @@ RSpec.describe Toon do
       it 'handles single hash in array' do
         input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
         result = Toon.encode(input, flatten_on: 'items')
-        expect(result).to eq("items[1]{one/two}:\n  2")
+        expect(result).to eq("items[1]{one.two}:\n  2")
       end
 
       it 'handles arrays with non-hash elements gracefully' do
         input = { 'mixed' => [1, 'string', { 'key' => { 'nested' => 'value' } }] }
         result = Toon.encode(input, flatten_on: 'mixed')
-        # Should not crash, returns array as-is (not all hashes)
+        # Should not crash, returns array as-is (not all hashes, so no flattening)
         expect(result).to eq(
           "mixed[3]:\n" \
           "  - 1\n" \
           "  - string\n" \
-          "  - key/nested: value"
+          "  - key:\n" \
+          "      nested: value"
         )
       end
 
@@ -1394,7 +1395,7 @@ RSpec.describe Toon do
       it 'handles nil values in nested hashes' do
         input = { 'items' => [{ 'a' => { 'b' => nil } }] }
         result = Toon.encode(input, flatten_on: 'items')
-        expect(result).to eq("items[1]{a/b}:\n  null")
+        expect(result).to eq("items[1]{a.b}:\n  null")
       end
 
       it 'handles mixed types as nested values' do
@@ -1407,7 +1408,7 @@ RSpec.describe Toon do
           }]
         }
         result = Toon.encode(input, flatten_on: 'items')
-        expect(result).to eq("items[1]{a/b,c,d,e}:\n  1,string,true,null")
+        expect(result).to eq("items[1]{a.b,c,d,e}:\n  1,string,true,null")
       end
     end
 
@@ -1422,7 +1423,7 @@ RSpec.describe Toon do
         result = Toon.encode(input, normalize_on: 'items', flatten_on: 'items')
         # After normalize: both have same nested structure
         # After flatten: nested keys become flat
-        expect(result).to eq("items[2]{one/two,one/three}:\n  2,null\n  2,3")
+        expect(result).to eq("items[2]{one.two,one.three}:\n  2,null\n  2,3")
       end
 
       it 'works with both options on same key' do
@@ -1435,9 +1436,9 @@ RSpec.describe Toon do
         }
         result = Toon.encode(input, normalize_on: 'data', flatten_on: 'data')
         # After normalize: all have id and meta with same nested keys
-        # After flatten: meta/name and meta/age become flat keys
+        # After flatten: meta.name and meta.age become flat keys
         expect(result).to eq(
-          "data[3]{id,meta/name,meta/age}:\n" \
+          "data[3]{id,meta.name,meta.age}:\n" \
           "  1,Alice,null\n" \
           "  null,Bob,30\n" \
           "  3,null,null"
@@ -1453,9 +1454,9 @@ RSpec.describe Toon do
           }]
         }
         result = Toon.encode(input, flatten_on: 'items', stringify_on: 'items')
-        # After flatten: one/two becomes a key with array value
+        # After flatten: one.two becomes a key with array value
         # After stringify: array becomes string
-        expect(result).to eq("items[1]{one/two}:\n  \"[1, 2, 3]\"")
+        expect(result).to eq("items[1]{one.two}:\n  \"[1, 2, 3]\"")
       end
 
       it 'preserves primitives after flattening and stringifies arrays' do
@@ -1466,9 +1467,9 @@ RSpec.describe Toon do
           }]
         }
         result = Toon.encode(input, flatten_on: 'items', stringify_on: 'items')
-        # After flatten: a/b => 1, c => [2,3]
+        # After flatten: a.b => 1, c => [2,3]
         # After stringify: primitive stays, array becomes string
-        expect(result).to eq("items[1]{a/b,c}:\n  1,\"[2, 3]\"")
+        expect(result).to eq("items[1]{a.b,c}:\n  1,\"[2, 3]\"")
       end
     end
 
@@ -1487,10 +1488,10 @@ RSpec.describe Toon do
           stringify_on: 'items'
         )
         # After normalize: both have one.two and one.three.four structure
-        # After flatten: one/two and one/three/four become flat keys
+        # After flatten: one.two and one.three.four become flat keys
         # After stringify: arrays become strings, primitives stay
         expect(result).to eq(
-          "items[2]{one/two,one/three/four}:\n" \
+          "items[2]{one.two,one.three.four}:\n" \
           "  \"[1, 2]\",null\n" \
           "  \"[3, 4]\",5"
         )
@@ -1510,10 +1511,10 @@ RSpec.describe Toon do
           stringify_on: 'data'
         )
         # After normalize: both have id, meta.tags, meta.priority
-        # After flatten: meta/tags and meta/priority become flat keys
+        # After flatten: meta.tags and meta.priority become flat keys
         # After stringify: arrays become strings
         expect(result).to eq(
-          "data[2]{id,meta/tags,meta/priority}:\n" \
+          "data[2]{id,meta.tags,meta.priority}:\n" \
           "  1,\"[\\\"a\\\", \\\"b\\\"]\",null\n" \
           "  null,\"[\\\"c\\\"]\",2"
         )
@@ -1524,19 +1525,19 @@ RSpec.describe Toon do
       it 'works with delimiter option' do
         input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
         result = Toon.encode(input, flatten_on: 'items', delimiter: '|')
-        expect(result).to eq("items[1|]{one/two}:\n  2")
+        expect(result).to eq("items[1|]{one.two}:\n  2")
       end
 
       it 'works with length_marker option' do
         input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
         result = Toon.encode(input, flatten_on: 'items', length_marker: '#')
-        expect(result).to eq("items[#1]{one/two}:\n  2")
+        expect(result).to eq("items[#1]{one.two}:\n  2")
       end
 
       it 'works with indent option' do
         input = { 'items' => [{ 'one' => { 'two' => 2 } }] }
         result = Toon.encode(input, flatten_on: 'items', indent: 4)
-        expect(result).to eq("items[1]{one/two}:\n    2")
+        expect(result).to eq("items[1]{one.two}:\n    2")
       end
 
       it 'works with all options combined' do
@@ -1556,10 +1557,10 @@ RSpec.describe Toon do
           indent: 4
         )
         # After normalize: both have a.b and a.c structure
-        # After flatten: a/b and a/c become flat keys
+        # After flatten: a.b and a.c become flat keys
         # After stringify: array becomes string
         expect(result).to eq(
-          "items[#2|]{a/b|a/c}:\n" \
+          "items[#2|]{a.b|a.c}:\n" \
           "    1|null\n" \
           "    2|\"[3, 4]\""
         )

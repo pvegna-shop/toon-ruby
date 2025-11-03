@@ -18,14 +18,14 @@ module Toon
     end
 
     # Recursively flatten a single hash
-    # Converts nested hash structures like {"a" => {"b" => 1}} to {"a/b" => 1}
+    # Converts nested hash structures like {"a" => {"b" => 1}} to {"a.b" => 1}
     # Only flattens Hash values, not Arrays
     #
     # @param hash [Hash] The hash to flatten
     # @param parent_key [String] The parent key path (used in recursion)
-    # @param sep [String] The separator to use between nested keys (default: "/")
+    # @param sep [String] The separator to use between nested keys (default: ".")
     # @return [Hash] The flattened hash
-    def flatten_hash(hash, parent_key = "", sep = "/")
+    def flatten_hash(hash, parent_key = "", sep = ".")
       return hash unless hash.is_a?(Hash)
 
       hash.each_with_object({}) do |(key, value), result|

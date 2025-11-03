@@ -50,7 +50,7 @@ RSpec.describe 'Toon.decode with inverse operations' do
 
   describe 'unflatten_on' do
     it 'converts flattened keys back to nested hashes' do
-      input = { "items" => [{ "one/two" => 2, "one/three/four" => 5 }] }
+      input = { "items" => [{ "one.two" => 2, "one.three.four" => 5 }] }
       toon = Toon.encode(input)
       decoded = Toon.decode(toon, unflatten_on: "items")
 
@@ -67,7 +67,7 @@ RSpec.describe 'Toon.decode with inverse operations' do
     end
 
     it 'handles deeply nested paths' do
-      input = { "items" => [{ "a/b/c/d/e" => 5 }] }
+      input = { "items" => [{ "a.b.c.d.e" => 5 }] }
       toon = Toon.encode(input)
       decoded = Toon.decode(toon, unflatten_on: "items")
 
@@ -76,7 +76,7 @@ RSpec.describe 'Toon.decode with inverse operations' do
     end
 
     it 'merges overlapping paths' do
-      input = { "items" => [{ "user/name" => "Ada", "user/id" => 123 }] }
+      input = { "items" => [{ "user.name" => "Ada", "user.id" => 123 }] }
       toon = Toon.encode(input)
       decoded = Toon.decode(toon, unflatten_on: "items")
 
@@ -340,9 +340,9 @@ RSpec.describe 'Toon.decode with inverse operations' do
       expect(decoded).to eq(data)
     end
 
-    it 'handles strings with forward slashes that should not be unflattened' do
-      # When not using flatten_on, strings with "/" should remain unchanged
-      data = { "items" => [{ "path" => "folder/file.txt" }] }
+    it 'handles strings with dots that should not be unflattened' do
+      # When not using flatten_on, strings with "." should remain unchanged
+      data = { "items" => [{ "path" => "file.txt" }] }
 
       encoded = Toon.encode(data)
       decoded = Toon.decode(encoded)
