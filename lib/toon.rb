@@ -25,9 +25,9 @@ module Toon
   # @param indent [Integer] Number of spaces per indentation level (default: 2)
   # @param delimiter [String] Delimiter for array values and tabular rows (default: ',')
   # @param length_marker [String, false] Optional marker to prefix array lengths (default: false)
-  # @param normalize_on [String, nil] Optional key name to normalize array of hashes (default: nil)
-  # @param flatten_on [String, nil] Optional key name to flatten nested hashes in array of hashes (default: nil)
-  # @param stringify_on [String, nil] Optional key name to stringify non-primitives in array of hashes (default: nil)
+  # @param normalize_on [String, Symbol, nil] Optional key name to normalize array of hashes (default: nil)
+  # @param flatten_on [String, Symbol, nil] Optional key name to flatten nested hashes in array of hashes (default: nil)
+  # @param stringify_on [String, Symbol, nil] Optional key name to stringify non-primitives in array of hashes (default: nil)
   # @return [String] TOON-formatted string
   def self.encode(input, indent: 2, delimiter: DEFAULT_DELIMITER, length_marker: false, normalize_on: nil, flatten_on: nil, stringify_on: nil)
     # Apply transformations recursively at all nesting levels
@@ -45,9 +45,9 @@ module Toon
   # @param input [String] TOON-formatted string to decode
   # @param indent [Integer] Number of spaces per indentation level (default: 2)
   # @param strict [Boolean] When true, enforce strict validation of array lengths and tabular row counts (default: true)
-  # @param destringify_on [String, nil] Optional key name to destringify array of hashes (default: nil)
-  # @param unflatten_on [String, nil] Optional key name to unflatten nested hashes in array of hashes (default: nil)
-  # @param denormalize_on [String, nil] Optional key name to denormalize array of hashes (default: nil)
+  # @param destringify_on [String, Symbol, nil] Optional key name to destringify array of hashes (default: nil)
+  # @param unflatten_on [String, Symbol, nil] Optional key name to unflatten nested hashes in array of hashes (default: nil)
+  # @param denormalize_on [String, Symbol, nil] Optional key name to denormalize array of hashes (default: nil)
   # @return [Object] Decoded Ruby value (Hash, Array, or primitive)
   def self.decode(input, indent: 2, strict: true, destringify_on: nil, unflatten_on: nil, denormalize_on: nil)
     resolved_options = resolve_decode_options(indent: indent, strict: strict)
